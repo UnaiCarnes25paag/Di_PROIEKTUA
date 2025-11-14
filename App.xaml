@@ -1,0 +1,26 @@
+﻿<Application x:Class="Erronka.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Erronka.ViewModels"
+             xmlns:views="clr-namespace:Erronka.Views">
+    <Application.Resources>
+        <!-- Map viewmodels -> views so ContentControl displays the correct UserControl -->
+        <DataTemplate DataType="{x:Type vm:UsersViewModel}">
+            <views:UsersView/>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:StockViewModel}">
+            <views:StockView/>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:ReservationsViewModel}">
+            <views:ReservationsView/>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:OrdersViewModel}">
+            <views:OrdersView/>
+        </DataTemplate>
+
+        <!-- Add more mappings as needed -->
+    </Application.Resources>
+</Application>

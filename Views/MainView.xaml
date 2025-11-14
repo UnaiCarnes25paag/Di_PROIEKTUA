@@ -1,0 +1,17 @@
+<Window x:Class="Erronka.Views.MainView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Erronka"
+        Height="500" Width="800">
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Left" Background="#222" Width="180">
+            <Button Content="Stocka" Foreground="White" Command="{Binding ShowStockCommand}"/>
+            <Button Content="Erabiltzaileak" Foreground="White" Command="{Binding ShowUsersCommand}"/>
+            <Button Content="Erreserbak" Foreground="White" Command="{Binding ShowReservationsCommand}"/>
+            <Button Content="Ticketak" Foreground="White" Command="{Binding ShowOrdersCommand}"/>
+            <Button Content="Irten" Foreground="White" Command="{Binding ExitCommand}"/>
+        </StackPanel>
+
+        <ContentControl Content="{Binding CurrentView}"/>
+    </DockPanel>
+</Window>

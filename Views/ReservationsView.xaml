@@ -1,0 +1,28 @@
+<UserControl x:Class="Erronka.Views.ReservationsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Erronka.ViewModels">
+    <!-- DataContext removed from XAML; set in code-behind -->
+
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <DataGrid ItemsSource="{Binding Reservations}" SelectedItem="{Binding SelectedReservation}"
+                  AutoGenerateColumns="False" Grid.Row="0" Margin="0,0,0,10">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Mahai ID" Binding="{Binding TableId}" Width="100"/>
+                <DataGridTextColumn Header="Data" Binding="{Binding Date}" Width="150"/>
+                <DataGridTextColumn Header="Tartea" Binding="{Binding TimeSlot}" Width="100"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel Orientation="Horizontal" Grid.Row="1" HorizontalAlignment="Right">
+            <Button Content="Gehitu" Command="{Binding AddCommand}" Margin="5"/>
+            <Button Content="Aldatu" Command="{Binding UpdateCommand}" Margin="5"/>
+            <Button Content="Ezabatu" Command="{Binding DeleteCommand}" Margin="5"/>
+        </StackPanel>
+    </Grid>
+</UserControl>
