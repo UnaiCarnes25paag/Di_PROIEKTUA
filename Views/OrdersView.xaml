@@ -1,26 +1,70 @@
-<UserControl x:Class="Erronka.Views.OrdersView"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:Erronka.ViewModels">
-    <!-- DataContext removed from XAML; set in code-behind -->
-
+<UserControl x:Class="Erronka.Views.OrdersView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vm="clr-namespace:Erronka.ViewModels">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </UserControl.Resources>
     <Grid Margin="15">
         <Grid.RowDefinitions>
-            <RowDefinition Height="2*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-
-        <DataGrid ItemsSource="{Binding Products}" SelectedItem="{Binding SelectedProduct}"
-                  AutoGenerateColumns="False" Grid.Row="0">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Izena" Binding="{Binding Name}" Width="*"/>
-                <DataGridTextColumn Header="Prezioa (&#x20AC;)" Binding="{Binding Price}" Width="100"/>
-            </DataGrid.Columns>
-        </DataGrid>
-
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-            <Button Content="Gehitu eskaerara" Command="{Binding AddToOrderCommand}" Margin="5"/>
-            <Button Content="Ordaindu eta Ticket erakutsi" Command="{Binding PayCommand}" Margin="5"/>
+        <!-- PANEL DE RESERVAS -->
+        <StackPanel>
+            <TextBlock Text="Zure Erreserbak" FontSize="18" FontWeight="Bold"/>
+            <ListBox ItemsSource="{Binding Reservations}" SelectedItem="{Binding SelectedReservation}" DisplayMemberPath="TableId" Margin="0,10,0,20"/>
         </StackPanel>
+        <!-- PANEL DE PRODUCTOS (VISIBLE SOLO SI HAY RESERVA SELECCIONADA) -->
+        <Grid Grid.Row="1" Visibility="{Binding IsReservationSelected, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+            <!-- PRODUCTOS -->
+            <DataGrid ItemsSource="{Binding Products}" SelectedItem="{Binding SelectedProduct}" AutoGenerateColumns="False">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Izena" Binding="{Binding Name}" Width="*"/>
+                    <DataGridTextColumn Header="Prezioa (&#x20AC;)" Binding="{Binding Price}" Width="100"/>
+                    <DataGridTemplateColumn Header="A&#xF1;adir">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="+" Command="{Binding DataContext.AddToCartCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+            <!-- CARRITO COMO DATAGRID CON BOTON FIJO ABAJO -->
+            <Grid Grid.Column="1" Margin="20,0,0,0" MaxWidth="300">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <!-- DataGrid ocupa todo el espacio disponible -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Boton fijo abajo -->
+                </Grid.RowDefinitions>
+
+                <!-- DataGrid para el carrito con scroll automatico -->
+                <DataGrid ItemsSource="{Binding Cart}" AutoGenerateColumns="False" CanUserAddRows="False" Grid.Row="0">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Izena" Binding="{Binding Name}" Width="*"/>
+                        <DataGridTextColumn Header="Prezioa (&#x20AC;)" Binding="{Binding Price}" Width="100"/>
+                        <DataGridTemplateColumn Header="Kendu">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Content="-"
+                                Command="{Binding DataContext.RemoveFromCartCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Boton de pagar fijo abajo a la derecha -->
+                <Button Content="Ordaindu eta Ticket erakutsi"
+                Command="{Binding PayCommand}"
+                Grid.Row="1"
+                HorizontalAlignment="Center"
+                Margin="0,10,0,0"/>
+            </Grid>
+        </Grid>
     </Grid>
 </UserControl>

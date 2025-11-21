@@ -3,7 +3,6 @@ using Erronka.Data;
 using Erronka.Models;
 using Erronka.Services;
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
@@ -15,58 +14,99 @@ namespace Erronka.ViewModels
     {
         private readonly OrderService _orderService;
         private readonly TicketService _ticketService;
+        private readonly ReservationService _reservationService;
         private readonly User _currentUser;
 
-        public ObservableCollection<Product> Products { get; set; }
-        public ObservableCollection<Product> Cart { get; set; }
+        public ObservableCollection<Reservation> Reservations { get; set; } = new();
+        public ObservableCollection<Product> Products { get; set; } = new();
+        public ObservableCollection<Product> Cart { get; set; } = new();
+
+        private Reservation _selectedReservation;
+        public Reservation SelectedReservation
+        {
+            get => _selectedReservation;
+            set
+            {
+                _selectedReservation = value;
+                OnPropertyChanged();
+
+                IsReservationSelected = _selectedReservation != null;
+
+                if (IsReservationSelected)
+                    LoadProducts();
+            }
+        }
+
+        private bool _isReservationSelected;
+        public bool IsReservationSelected
+        {
+            get => _isReservationSelected;
+            set { _isReservationSelected = value; OnPropertyChanged(); }
+        }
 
         public ICommand AddToCartCommand { get; }
         public ICommand RemoveFromCartCommand { get; }
         public ICommand PayCommand { get; }
 
-        // Parameterless ctor for places that construct OrdersViewModel without a user
         public OrdersViewModel() : this(App.CurrentUser) { }
 
-        public OrdersViewModel(User currentUser)
+        public OrdersViewModel(User user)
         {
-            _currentUser = currentUser;
+            _currentUser = user;
+
+            _reservationService = new ReservationService();
             _orderService = new OrderService();
             _ticketService = new TicketService();
-
-            Products = new ObservableCollection<Product>(LoadAllProducts());
-            Cart = new ObservableCollection<Product>();
 
             AddToCartCommand = new RelayCommand(AddToCart);
             RemoveFromCartCommand = new RelayCommand(RemoveFromCart);
             PayCommand = new RelayCommand(Pay);
+
+            LoadReservations();
         }
 
-        private IEnumerable<Product> LoadAllProducts()
+        private void LoadReservations()
+        {
+            var userRes = _reservationService
+                .GetByUserIdWithTable(_currentUser.Id)
+                .OrderBy(r => r.Date)
+                .ThenBy(r => r.TimeSlot);
+
+            Reservations = new ObservableCollection<Reservation>(userRes);
+            OnPropertyChanged(nameof(Reservations));
+        }
+
+        private void LoadProducts()
         {
             using var conn = Database.GetConnection();
-            // Join with Stock to populate Product.Stock (Stock table exists in DB)
-            var sql = @"SELECT p.Id, p.Name, p.Price, COALESCE(s.Quantity, 0) AS Stock
+
+            var sql = @"SELECT 
+                        p.Id, p.Name, p.Price,
+                        COALESCE(s.Quantity,0) AS Stock
                         FROM Products p
                         LEFT JOIN Stock s ON p.Id = s.ProductId";
-            return conn.Query<Product>(sql).ToList();
-        }
 
-        private void UpdateProductStock(Product product)
-        {
-            using var conn = Database.GetConnection();
-            // Update the Stock table quantity for the product
-            conn.Execute("UPDATE Stock SET Quantity = @Quantity WHERE ProductId = @ProductId",
-                new { Quantity = product.Stock, ProductId = product.Id });
+            var products = conn.Query<Product>(sql).ToList();
+
+            Products = new ObservableCollection<Product>(products);
+            OnPropertyChanged(nameof(Products));
         }
 
         private void AddToCart(object obj)
         {
-            if (obj is Product product && product.Stock > 0)
+            if (obj is Product p)
             {
-                Cart.Add(product);
-                product.Stock--;
-                UpdateProductStock(product);
+                if (p.Stock <= 0)
+                {
+                    MessageBox.Show("Ez dago stock nahikorik.");
+                    return;
+                }
+
+                Cart.Add(p);
+                p.Stock--;
+
                 OnPropertyChanged(nameof(Products));
+                OnPropertyChanged(nameof(Cart));
             }
         }
 
@@ -74,53 +114,116 @@ namespace Erronka.ViewModels
         {
             if (obj is Product product)
             {
-                // remove only a single instance from the cart
-                var toRemove = Cart.FirstOrDefault(p => p.Id == product.Id);
-                if (toRemove != null)
+                var existing = Cart.FirstOrDefault(x => x.Id == product.Id);
+
+                if (existing != null)
                 {
-                    Cart.Remove(toRemove);
+                    Cart.Remove(existing);
                     product.Stock++;
-                    UpdateProductStock(product);
+
                     OnPropertyChanged(nameof(Products));
+                    OnPropertyChanged(nameof(Cart));
                 }
             }
         }
 
         private void Pay(object obj)
         {
-            // Total as decimal, convert product.Price (double) to decimal explicitly
-            decimal total = 0m;
-            foreach (var p in Cart)
-                total += (decimal)p.Price;
+            if (SelectedReservation == null)
+            {
+                MessageBox.Show("Aukeratu mahai bat lehenengo.");
+                return;
+            }
 
-            // Build Order with aggregated items (product counts)
-            var grouped = Cart.GroupBy(p => p.Id)
-                              .Select(g => new OrderItem
-                              {
-                                  ProductId = g.Key,
-                                  Quantity = g.Count()
-                              }).ToList();
+            if (!Cart.Any())
+            {
+                MessageBox.Show("Orga hutsa.");
+                return;
+            }
+
+            var items = Cart
+                .GroupBy(p => p.Id)
+                .Select(g => new OrderItem
+                {
+                    ProductId = g.Key,
+                    Quantity = g.Count()
+                })
+                .ToList();
 
             var order = new Order
             {
-                TableId = null,
-                UserId = _currentUser?.Id ?? 0,
+                TableId = SelectedReservation.TableId,
+                UserId = _currentUser.Id,
                 CreatedAt = DateTime.Now,
                 Paid = false,
-                Items = grouped
+                Items = items
             };
 
-            // Persist order using OrderService
-            int orderId = _orderService.CreateOrder(order);
+            using var conn = Database.GetConnection();
+            using var tran = conn.BeginTransaction();
 
-            // Generate ticket (writes file and returns path)
-            var ticketPath = _ticketService.GenerateTicket(orderId);
-            MessageBox.Show($"Ticket generado: {ticketPath}", "Ticket", MessageBoxButton.OK, MessageBoxImage.Information);
+            int orderId = -1;
 
-            // Clear cart and reload products (stock changes were already persisted)
+            try
+            {
+                orderId = _orderService.CreateOrderTransactional(order, conn, tran);
+
+                foreach (var item in items)
+                {
+                    int currentStock = conn.ExecuteScalar<int>(
+                        "SELECT Quantity FROM Stock WHERE ProductId = @Pid",
+                        new { Pid = item.ProductId },
+                        tran
+                    );
+
+                    if (currentStock < item.Quantity)
+                    {
+                        tran.Rollback();
+                        MessageBox.Show($"Ez dago stock nahikorik produktuarentzat (Produktua ID: {item.ProductId}).");
+                        return;
+                    }
+
+                    conn.Execute(
+                        "UPDATE Stock SET Quantity = Quantity - @Qty WHERE ProductId = @Pid",
+                        new { Qty = item.Quantity, Pid = item.ProductId },
+                        tran
+                    );
+                }
+
+                conn.Execute(
+                    "DELETE FROM Reservations WHERE Id = @Id",
+                    new { Id = SelectedReservation.Id },
+                    tran
+                );
+
+                conn.Execute(
+                    "UPDATE Orders SET Paid = 1 WHERE Id = @Id",
+                    new { Id = orderId },
+                    tran
+                );
+
+                tran.Commit();
+            }
+            catch (Exception ex)
+            {
+                try { tran.Rollback(); } catch { }
+                MessageBox.Show("Errorea ordainketan: " + ex.Message);
+                return;
+            }
+
+            string path = _ticketService.GenerateTicket(orderId);
+            MessageBox.Show($"Sortutako Ticketa: {path}");
+
             Cart.Clear();
-            Products = new ObservableCollection<Product>(LoadAllProducts());
-            OnPropertyChanged(nameof(Products));
+            OnPropertyChanged(nameof(Cart));
+
+            LoadReservations();
+            LoadProducts();
+
+            SelectedReservation = null;
+            IsReservationSelected = false;
+
+            MessageBox.Show("Ordainketa ondo gauzatu da.");
         }
     }
 }
